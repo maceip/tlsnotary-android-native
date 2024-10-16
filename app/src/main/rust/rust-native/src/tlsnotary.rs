@@ -1,15 +1,11 @@
-use futures::{AsyncRead, AsyncWrite};
 use http_body_util::Empty;
 use hyper::{body::Bytes, Request, StatusCode};
 use hyper_util::rt::TokioIo;
-use k256::{pkcs8::DecodePrivateKey, SecretKey};
+use notary_client::{Accepted, NotarizationRequest, NotaryClient};
 use tlsn_common::config::ProtocolConfig;
-use tlsn_common::config::ProtocolConfigValidator;
-use tlsn_core::{attestation::AttestationConfig, signing::SignatureAlgId, CryptoProvider};
 use tlsn_core::{request::RequestConfig, transcript::TranscriptCommitConfig};
 use tlsn_formats::http::{DefaultHttpCommitter, HttpCommit, HttpTranscript};
 use tlsn_prover::{Prover, ProverConfig};
-use tlsn_verifier::{Verifier, VerifierConfig};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 
 pub const NOTARY_PRIVATE_KEY: &[u8] = &[1u8; 32];
@@ -19,67 +15,61 @@ const MAX_SENT_DATA: usize = 1 << 12;
 // Maximum number of bytes that can be received by prover from server
 const MAX_RECV_DATA: usize = 1 << 14;
 
-/// Runs a simple Notary with the provided connection to the Prover.
-pub async fn run_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn: T) {
-    let pem_data = include_str!("notary.key");
-    let secret_key = SecretKey::from_pkcs8_pem(pem_data).unwrap().to_bytes();
+// Setting of the application server
+const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 TLSNotary/7";
 
-    let mut provider = CryptoProvider::default();
-    provider.signer.set_secp256k1(&secret_key).unwrap();
+#[tokio::main]
+pub async fn prove(
+    hosted_notary: String,
+    domain: String,
+    uri: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // a hosted notary service -- check explorer.tlsnotary.org
+    let notary_host: &str = &hosted_notary;
+    const NOTARY_PORT: u16 = 443;
 
-    // Setup the config. Normally a different ID would be generated
-    // for each notarization.
-    let config_validator = ProtocolConfigValidator::builder()
+    tracing_subscriber::fmt::init();
+
+    let notary_client = NotaryClient::builder()
+        .host(notary_host)
+        .port(NOTARY_PORT)
+        .path_prefix("v0.1.0-alpha.7")
+        .enable_tls(true)
+        .build()
+        .unwrap();
+
+    let notarization_request = NotarizationRequest::builder()
         .max_sent_data(MAX_SENT_DATA)
         .max_recv_data(MAX_RECV_DATA)
         .build()
         .unwrap();
 
-    let config = VerifierConfig::builder()
-        .protocol_config_validator(config_validator)
-        .crypto_provider(provider)
-        .build()
-        .unwrap();
-
-    let attestation_config = AttestationConfig::builder()
-        .supported_signature_algs(vec![SignatureAlgId::SECP256K1])
-        .build()
-        .unwrap();
-
-    Verifier::new(config)
-        .notarize(conn, &attestation_config)
+    let Accepted {
+        io: notary_connection,
+        id: _session_id,
+        ..
+    } = notary_client
+        .request_notarization(notarization_request)
         .await
+        .expect("Could not connect to notary. Make sure it is running.");
+
+    // Set up protocol configuration for prover.
+    let protocol_config = ProtocolConfig::builder()
+        .max_sent_data(MAX_SENT_DATA)
+        .max_recv_data(MAX_RECV_DATA)
+        .build()
         .unwrap();
-}
 
-// Setting of the application server
-const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36";
-
-#[tokio::main]
-pub async fn prove(domain: String, uri: String) -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-
-    let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
-
-    // Start a local simple notary service
-    tokio::spawn(run_notary(notary_socket.compat()));
     let domain_rs: &str = &domain;
-    // Prover configuration.
     let config = ProverConfig::builder()
         .server_name(domain_rs)
-        .protocol_config(
-            ProtocolConfig::builder()
-                // We must configure the amount of data we expect to exchange beforehand, which will
-                // be preprocessed prior to the connection. Reducing these limits will improve
-                // performance.
-                .max_sent_data(1024)
-                .max_recv_data(4096)
-                .build()?,
-        )
+        .protocol_config(protocol_config)
         .build()?;
 
     // Create a new prover and perform necessary setup.
-    let prover = Prover::new(config).setup(prover_socket.compat()).await?;
+    let prover = Prover::new(config)
+        .setup(notary_connection.compat())
+        .await?;
 
     // Open a TCP connection to the server.
     let client_socket = tokio::net::TcpStream::connect((domain.clone(), 443)).await?;

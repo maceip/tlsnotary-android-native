@@ -6,12 +6,12 @@ edition = "2021"
 
 [dependencies]
 jni = "0.21.1"
-notary-client =  { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.7" }
-tlsn-common =  { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.7" }
-tlsn-core =  { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.7" }
-tlsn-prover =  { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.7" }
-tlsn-verifier =  { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.7" }
-tlsn-formats =  { git = "https://github.com/tlsnotary/tlsn", tag = "v0.1.0-alpha.7" }
+notary-client =  { git = "https://github.com/tlsnotary/tlsn", rev = "a7a8a8341095c34607d063c372d269cd46ce4b99" }
+tlsn-common =  { git = "https://github.com/tlsnotary/tlsn", rev = "a7a8a8341095c34607d063c372d269cd46ce4b99" }
+tlsn-core =  { git = "https://github.com/tlsnotary/tlsn", rev = "a7a8a8341095c34607d063c372d269cd46ce4b99" }
+tlsn-prover =  { git = "https://github.com/tlsnotary/tlsn", rev = "a7a8a8341095c34607d063c372d269cd46ce4b99" }
+tlsn-verifier =  { git = "https://github.com/tlsnotary/tlsn", rev = "a7a8a8341095c34607d063c372d269cd46ce4b99" }
+tlsn-formats =  { git = "https://github.com/tlsnotary/tlsn", rev = "a7a8a8341095c34607d063c372d269cd46ce4b99" }
 tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "e7b2db6" }
 
 
@@ -38,5 +38,5 @@ tracing-subscriber = "0.3"
 openssl-sys = {version = "0.9.103", features = ["vendored"]}
 
 [lib]
-crate_type = ["rlib", "dylib"]
+crate-type = ["rlib", "dylib"]
 

@@ -16,7 +16,8 @@ import com.macmac.rust_jni.ui.theme.RustjniTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        RustLib.prove("www.example.com", "/")
+        // replace notary.codes with your own notary domain or a semi-honest one 
+        RustLib.prove("notary.codes", "www.example.com", "/")
         setContent {
             RustjniTheme {
                 // A surface container using the 'background' color from the theme
